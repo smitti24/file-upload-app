@@ -5,10 +5,13 @@ const multer = require("multer");
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const File = require("./models/File");
+const { urlencoded } = require("express");
 
 const upload = multer({ dest: "uploads" }); //Initialize library where all file uploads are going inside a folder called uploads. Middleware.
 
 mongoose.connect(process.env.DATABASE_URL);
+
+app.use(express.urlencoded({ extended: true })); // Helps understand forms that are sent via a form tag via html.
 
 app.set("view engine", "ejs");
 
@@ -31,14 +34,28 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   res.render("index", { fileLink: `${req.headers.origin}/file/${file.id}` });
 });
 
-app.get("/file/:id", async (req, res) => {
+app.route("/file/:id").get(handleDownload).post(handleDownload);
+
+async function handleDownload(req, res) {
   const file = await File.findById(req.params.id);
+
+  if (file.password != null) {
+    if (req.body.password != null) {
+      res.render("password");
+      return;
+    }
+  }
+
+  if (!(await bcrypt.compare(req.body.password, file.password))) {
+    res.render("password", { error: true });
+    return;
+  }
 
   file.downloadCount++;
   await file.save();
   console.log(file.downloadCount);
 
   res.download(file.path, file.originalName);
-});
+}
 
 app.listen(3000);
